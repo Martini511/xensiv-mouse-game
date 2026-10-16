@@ -424,10 +424,10 @@ export class Game {
     }
     this.debugOverlay.update(input, {
       fps: this._fps.toFixed(0),
-      seite: this.currentSide,
+      side: this.currentSide,
       pos: formatPosition(this.character.position),
-      schalter: this.board?.slideSwitches.map((lever) => `${lever.id} ${lever.target.label}`).join(", ") ?? "-",
-      eingabe: input.lastDevice === "gamepad" ? "Controller" : "Maus/Tastatur",
+      switches: this.board?.slideSwitches.map((lever) => `${lever.id} ${lever.target.label}`).join(", ") ?? "-",
+      input: input.lastDevice === "gamepad" ? "Controller" : "Mouse/Keyboard",
     });
     this.renderer.render(this.scene, this.camera);
   }

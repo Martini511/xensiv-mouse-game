@@ -21,29 +21,29 @@ export class DebugOverlay {
     const lines = [];
 
     if (inputState.pointerLocked) {
-      lines.push(`<span class="status-connected">● Maus gefangen</span>`);
-      lines.push(`  Esc gibt die Maus frei.`);
+      lines.push(`<span class="status-connected">● Mouse captured</span>`);
+      lines.push(`  Esc releases the mouse.`);
     } else if (inputState.lockAvailable) {
-      lines.push(`<span class="status-disconnected">● Maus frei</span>`);
-      lines.push(`  Ins Spiel klicken,`);
-      lines.push(`  um mit der Maus zu schauen.`);
+      lines.push(`<span class="status-disconnected">● Mouse released</span>`);
+      lines.push(`  Click into the game`);
+      lines.push(`  to look around with the mouse.`);
     } else {
-      lines.push(`<span class="status-disconnected">● Kein Pointer Lock</span>`);
-      lines.push(`  Zum Umsehen mit gedrueckter`);
-      lines.push(`  linker Maustaste ziehen.`);
+      lines.push(`<span class="status-disconnected">● No pointer lock</span>`);
+      lines.push(`  Hold the left mouse button`);
+      lines.push(`  and drag to look around.`);
     }
     lines.push(
       inputState.gamepadConnected
-        ? `<span class="status-connected">● Controller verbunden</span> (Notfall)`
-        : `  Notfall: Controller anstecken,`
+        ? `<span class="status-connected">● Controller connected</span> (fallback)`
+        : `  Fallback: plug in a controller,`
     );
-    if (!inputState.gamepadConnected) lines.push(`  eine Taste druecken.`);
+    if (!inputState.gamepadConnected) lines.push(`  then press any button.`);
 
     lines.push("");
-    lines.push(`Bewegung x ${fmt(inputState.move.x)}  y ${fmt(inputState.move.y)}`);
-    lines.push(`Maus     x ${fmt(inputState.look.x)}  y ${fmt(inputState.look.y)}`);
+    lines.push(`Move     x ${fmt(inputState.move.x)}  y ${fmt(inputState.move.y)}`);
+    lines.push(`Mouse    x ${fmt(inputState.look.x)}  y ${fmt(inputState.look.y)}`);
     lines.push(`R-Stick  x ${fmt(inputState.stick.x)}  y ${fmt(inputState.stick.y)}`);
-    lines.push(`Tasten   ${escapeHtml(inputState.keys.map(keyLabel).join(", ") || "-")}`);
+    lines.push(`Keys     ${escapeHtml(inputState.keys.map(keyLabel).join(", ") || "-")}`);
 
     for (const [key, value] of Object.entries(extra)) {
       lines.push(`${key.padEnd(8)} ${value}`);
