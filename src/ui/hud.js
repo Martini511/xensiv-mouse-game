@@ -1,0 +1,448 @@
+import logoUrl from "../assets/lowres-Logo_Infineon_RGB.eps.png";
+import { formatDate, formatTime } from "../core/leaderboard.js";
+
+/**
+ * Spiel-UI: Titelbildschirm, Start-Banner, Missions-Anzeige, Kontext-Prompt
+ * und die Meldungen fuer Sieg und Absturz. Bewusst reines DOM - Text bleibt so
+ * scharf und ist billiger als Sprites in der Szene.
+ */
+
+/** Liegt waehrend der Kamerafahrt ueber der Szene. */
+export class TitleScreen {
+  constructor({ name, subtitle }, parent = document.body) {
+    this.element = document.createElement("div");
+    this.element.id = "title-screen";
+
+    const logo = document.createElement("img");
+    logo.className = "title-logo";
+    logo.src = logoUrl;
+    logo.alt = "Infineon";
+
+    const heading = document.createElement("h1");
+    heading.className = "title-name";
+    heading.textContent = name;
+
+    const sub = document.createElement("div");
+    sub.className = "title-subtitle";
+    sub.textContent = subtitle;
+
+    this.element.append(logo, heading, sub);
+    parent.appendChild(this.element);
+  }
+
+  hide() {
+    if (this.element.classList.contains("is-hidden")) return;
+    this.element.classList.add("is-hidden");
+    this.element.addEventListener("transitionend", () => this.element.remove(), { once: true });
+  }
+}
+
+export class MessageOverlay {
+  constructor(parent = document.body) {
+    this.element = document.createElement("div");
+    this.element.id = "message-overlay";
+    this.element.hidden = true;
+
+    this.card = document.createElement("div");
+    this.card.className = "message-card";
+    this.element.appendChild(this.card);
+
+    parent.appendChild(this.element);
+  }
+
+  /**
+   * Mit `tabs` landen Text + Bestzeiten und die Steuerung in zwei Reitern,
+   * von denen immer genau einer offen ist - anfangs der Info-Reiter.
+   * @param {{title: string, body?: string[], controls?: {key: string, action: string}[],
+   *          scores?: {seconds: number, date: string}[], highlight?: number,
+   *          tabs?: {info: {label: string, key: string}, controls: {label: string, key: string}},
+   *          footer?: string, tone?: string}} content
+   */
+  show({
+    title,
+    body = [],
+    controls = [],
+    scores = [],
+    highlight = 0,
+    tabs = null,
+    footer = "",
+    tone = "neutral",
+  }) {
+    this.content = { title, body, controls, scores, highlight, tabs, footer, tone };
+    this.card.className = `message-card tone-${tone}`;
+
+    const info = [
+      ...body.map((line) => paragraph(line)),
+      ...(scores.length ? [scoreTable(scores, highlight)] : []),
+    ];
+    const controlNodes = controls.length ? [controlTable(controls)] : [];
+
+    this._tabs = null;
+    if (tabs) {
+      this._tabs = {
+        info: tabSection(tabs.info, info),
+        controls: tabSection(tabs.controls, controlNodes),
+      };
+      this.openTab("info");
+      this.card.replaceChildren(
+        heading(title),
+        this._tabs.info,
+        this._tabs.controls,
+        footerLine(footer)
+      );
+    } else {
+      this.card.replaceChildren(heading(title), ...info, ...controlNodes, footerLine(footer));
+    }
+    this.element.hidden = false;
+  }
+
+  /** @param {"info"|"controls"} name */
+  openTab(name) {
+    if (!this._tabs) return;
+    for (const [key, section] of Object.entries(this._tabs)) {
+      section.classList.toggle("is-open", key === name);
+    }
+  }
+
+  hide() {
+    this.element.hidden = true;
+  }
+
+  get visible() {
+    return !this.element.hidden;
+  }
+}
+
+export class MissionHud {
+  constructor(parent = document.body) {
+    this.element = document.createElement("div");
+    this.element.id = "mission-hud";
+    parent.appendChild(this.element);
+    this._last = "";
+    this._time = "0:00.00";
+  }
+
+  /**
+   * @param {{label: string, button: string, marked: boolean}[]} sensors
+   * @param {string} [time] formatierte Laufzeit; ohne Angabe bleibt die letzte stehen
+   */
+  update(sensors, time = this._time) {
+    this._time = time;
+    const found = sensors.filter((sensor) => sensor.marked).length;
+    this._render(
+      `<div class="mission-time">\u23f1 ${escapeHtml(time)}</div>` +
+        `<div class="mission-title">XENSIV\u2122 SENSORS ${found} / ${sensors.length}</div>` +
+        sensors
+          .map((sensor) => {
+            const text = sensor.marked ? `${sensor.label} (${sensor.button})` : "???";
+            return `<div class="sensor-row ${sensor.marked ? "is-found" : ""}">${
+              sensor.marked ? "\u25a0" : "\u25a1"
+            } ${escapeHtml(text)}</div>`;
+          })
+          .join("")
+    );
+  }
+
+  /** Anzeige im Erkundungsmodus: wie viele Bauteile schon entdeckt sind. */
+  showExplore(found, total) {
+    this._render(
+      `<div class="mission-time">EXPLORE</div>` +
+        `<div class="mission-title">PARTS ${found} / ${total}</div>`
+    );
+  }
+
+  _render(markup) {
+    if (markup !== this._last) {
+      this.element.innerHTML = markup;
+      this._last = markup;
+    }
+  }
+}
+
+/** Produktinfo zu dem Bauteil, neben dem der Charakter gerade steht. */
+export class InfoBox {
+  constructor(parent = document.body) {
+    this.element = document.createElement("div");
+    this.element.id = "info-box";
+    this.element.hidden = true;
+    parent.appendChild(this.element);
+    this._key = null;
+  }
+
+  /**
+   * Produktinfo (`used`, `alternatives`) und/oder freie Erklaerung
+   * (`description`, `sections`). Aendert sich der Inhalt, waehrend man am
+   * selben Bauteil steht (z.B. Schalterstellung), muss `stateKey` wechseln.
+   *
+   * @param {{id: string, button?: string}|null} part
+   * @param {{title: string, used?: {name: string, type: string},
+   *          alternatives?: {name: string, type: string, soon?: boolean}[],
+   *          description?: string, stateKey?: string,
+   *          sections?: {label: string, rows?: {name: string, type: string, current?: boolean}[],
+   *                      lines?: string[]}[]}} [info]
+   */
+  show(part, info) {
+    const key = part ? `${part.id}|${info?.stateKey ?? ""}` : null;
+    if (key === this._key) return;
+    const sameObject = this._key?.split("|")[0] === part?.id;
+    this._key = key;
+
+    if (!part || !info) {
+      this.element.hidden = true;
+      return;
+    }
+
+    const title = document.createElement("div");
+    title.className = "info-title";
+    title.textContent = info.title;
+
+    const tag = document.createElement("div");
+    tag.className = "info-tag";
+    tag.textContent = [part.id, part.button].filter(Boolean).join(" \u00b7 ");
+
+    const children = [title, tag];
+    if (info.description) children.push(textLine(info.description));
+    if (info.used) children.push(sectionLabel("Used here"), productRow(info.used, "is-used"));
+    if (info.alternatives?.length) {
+      children.push(
+        sectionLabel("Other IFX solutions"),
+        ...info.alternatives.map((part) => productRow(part, part.soon ? "is-soon" : ""))
+      );
+    }
+    for (const section of info.sections ?? []) {
+      children.push(sectionLabel(section.label));
+      for (const row of section.rows ?? []) {
+        children.push(productRow(row, row.current ? "is-used is-current" : "is-other"));
+      }
+      for (const line of section.lines ?? []) children.push(textLine(line));
+    }
+
+    this.element.replaceChildren(...children);
+    this.element.hidden = false;
+
+    // Nur beim Herantreten animieren, nicht bei jeder Zustandsaenderung.
+    if (this.element.classList.contains("is-prominent") && !sameObject) {
+      this.element.animate(
+        [
+          { opacity: 0, transform: "translateY(16px) scale(0.96)" },
+          { opacity: 1, transform: "none" },
+        ],
+        { duration: 280, easing: "cubic-bezier(0.2, 0.8, 0.2, 1)" }
+      );
+    }
+  }
+
+  /** Grosse, auffaellige Variante fuer den Erkundungsmodus. */
+  setProminent(on) {
+    this.element.classList.toggle("is-prominent", on);
+  }
+}
+
+function sectionLabel(text) {
+  const node = document.createElement("div");
+  node.className = "info-section";
+  node.textContent = text;
+  return node;
+}
+
+function textLine(text) {
+  const node = document.createElement("div");
+  node.className = "info-text";
+  node.textContent = text;
+  return node;
+}
+
+function productRow({ name, type }, modifier) {
+  const row = document.createElement("div");
+  row.className = `info-product ${modifier}`;
+
+  const nameNode = document.createElement("div");
+  nameNode.className = "info-name";
+  nameNode.textContent = name;
+
+  const typeNode = document.createElement("div");
+  typeNode.className = "info-type";
+  typeNode.textContent = type;
+
+  row.append(nameNode, typeNode);
+  return row;
+}
+
+export class Prompt {
+  constructor(parent = document.body) {
+    this.element = document.createElement("div");
+    this.element.id = "prompt";
+    this.element.hidden = true;
+    parent.appendChild(this.element);
+    this._last = null;
+  }
+
+  set(text) {
+    if (text === this._last) return;
+    this._last = text;
+
+    if (!text) {
+      this.element.hidden = true;
+      return;
+    }
+    this.element.textContent = text;
+    this.element.hidden = false;
+  }
+}
+
+/**
+ * Kurzuebersicht der Notfall-Steuerung per Controller - erscheint, sobald mit
+ * dem Controller gespielt wird, und verschwindet wieder, wenn Maus oder
+ * Tastatur uebernehmen. Gegenstueck zur Tastatur-Hinweisbox im Controller Game.
+ */
+export class GamepadHint {
+  constructor(parent = document.body) {
+    this.element = document.createElement("div");
+    this.element.id = "gamepad-hint";
+    this.element.hidden = true;
+
+    const title = document.createElement("div");
+    title.className = "gamepad-hint-title";
+    title.textContent = "Controller";
+
+    const keys = document.createElement("div");
+    keys.textContent =
+      "Left stick move \u00b7 Right stick look \u00b7 F jump \u00b7 T use \u00b7 I explore \u00b7 " +
+      "L1/R1 left/right click \u00b7 L2/R2 wheel \u00b7 L3/R3 wheel click \u00b7 D-Pad \u2193 info";
+
+    this.element.append(title, keys);
+    parent.appendChild(this.element);
+  }
+
+  update(visible) {
+    if (this.element.hidden === !visible) return;
+    this.element.hidden = !visible;
+  }
+
+  dispose() {
+    this.element.remove();
+  }
+}
+
+function heading(text) {
+  const node = document.createElement("h1");
+  node.textContent = text;
+  return node;
+}
+
+/** Absatz; `**Text**` wird hervorgehoben (siehe `.message-card p strong`). */
+function paragraph(text) {
+  const node = document.createElement("p");
+  text.split("**").forEach((part, index) => {
+    if (!part) return;
+    if (index % 2 === 0) {
+      node.append(part);
+      return;
+    }
+    const strong = document.createElement("strong");
+    strong.textContent = part;
+    node.append(strong);
+  });
+  return node;
+}
+
+function tabSection({ label, key }, children) {
+  const section = document.createElement("div");
+  section.className = "message-tab";
+
+  const head = document.createElement("div");
+  head.className = "message-tab-head";
+  const labelNode = document.createElement("span");
+  labelNode.className = "message-tab-label";
+  labelNode.textContent = label;
+  const keyNode = document.createElement("span");
+  keyNode.className = "message-tab-key";
+  keyNode.textContent = key;
+  head.append(labelNode, keyNode);
+
+  const content = document.createElement("div");
+  content.className = "message-tab-body";
+  content.append(...children);
+
+  section.append(head, content);
+  return section;
+}
+
+/**
+ * Eine Zeile je Taste - gerendert als Grid. Hat eine Zeile eine
+ * Controller-Belegung (Notfall-Steuerung), kommt eine eigene Spalte samt
+ * Kopfzeile dazu.
+ */
+function controlTable(controls) {
+  const table = document.createElement("div");
+  table.className = "control-table";
+  const withGamepad = controls.some((row) => row.gamepad);
+
+  const cell = (className, text) => {
+    const node = document.createElement("span");
+    node.className = className;
+    node.textContent = text;
+    return node;
+  };
+
+  if (withGamepad) {
+    table.classList.add("has-gamepad");
+    table.append(
+      cell("control-head", "Mouse & keyboard"),
+      cell("control-head", "Controller"),
+      cell("control-head", "")
+    );
+  }
+
+  for (const { key, gamepad, action } of controls) {
+    table.append(cell("control-key", key));
+    if (withGamepad) table.append(cell("control-key is-gamepad", gamepad ?? ""));
+    table.append(cell("control-action", action));
+  }
+
+  return table;
+}
+
+/** Bestenliste als dreispaltiges Grid; `highlight` hebt den neuen Eintrag hervor. */
+function scoreTable(scores, highlight) {
+  const table = document.createElement("div");
+  table.className = "score-table";
+
+  const header = document.createElement("div");
+  header.className = "score-head";
+  header.textContent = "Best times";
+  table.appendChild(header);
+
+  scores.forEach((entry, index) => {
+    const row = document.createElement("div");
+    row.className = `score-row ${index + 1 === highlight ? "is-new" : ""}`;
+
+    const rank = document.createElement("span");
+    rank.textContent = `${index + 1}.`;
+    const time = document.createElement("span");
+    time.className = "score-time";
+    time.textContent = formatTime(entry.seconds);
+    const date = document.createElement("span");
+    date.className = "score-date";
+    date.textContent = formatDate(entry.date);
+
+    row.append(rank, time, date);
+    table.appendChild(row);
+  });
+
+  return table;
+}
+
+function footerLine(text) {
+  const node = document.createElement("div");
+  node.className = "message-footer";
+  node.textContent = text;
+  return node;
+}
+
+function escapeHtml(text) {
+  return String(text).replace(
+    /[&<>"']/g,
+    (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]
+  );
+}

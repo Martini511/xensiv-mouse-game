@@ -1,0 +1,10 @@
+node_modules
+dist
+dist-ssr
+.vite
+*.local
+.DS_Store
+
+# Alte Platinen-Modelle - das Spiel laedt nur XENSIV_Mouse_with_wheel.glb.
+src/assets/XENSIV_Mouse.glb
+src/assets/XENSIV_Mouse_OLD.glb
