@@ -11,6 +11,8 @@ import platineUrl from "../assets/XENSIV_Mouse_with_wheel.glb?url";
 import playerUrl from "../assets/player.glb?url";
 
 export const PLATINE_URL = platineUrl;
+/** Unkomprimierte Dateigroesse des Platinen-GLB (von vite.config.js gesetzt). */
+export const PLATINE_BYTES = typeof __PLATINE_BYTES__ === "number" ? __PLATINE_BYTES__ : 0;
 export const PLAYER_URL = playerUrl;
 
 /**
@@ -32,10 +34,13 @@ export function alignToPcb(root, pcbNodeName) {
 
 /**
  * Promise-basiertes Laden. `onProgress` bekommt einen Wert 0..1 bzw. null,
- * wenn der Server keine Content-Length liefert (dann ist kein Fortschritt
- * berechenbar).
+ * wenn kein Fortschritt berechenbar ist.
+ *
+ * `expectedBytes` ist die echte Dateigroesse. Sie hat Vorrang vor
+ * Content-Length: Bei gzip-Auslieferung zaehlt `loaded` die entpackten Bytes,
+ * `total` aber nur die komprimierten - der Quotient wuerde ueber 1 steigen.
  */
-export function loadGLTF(url = platineUrl, onProgress) {
+export function loadGLTF(url = platineUrl, onProgress, expectedBytes = 0) {
   const loader = new GLTFLoader();
 
   return new Promise((resolve, reject) => {
@@ -44,7 +49,8 @@ export function loadGLTF(url = platineUrl, onProgress) {
       (gltf) => resolve(gltf),
       (event) => {
         if (!onProgress) return;
-        onProgress(event.lengthComputable ? event.loaded / event.total : null);
+        const total = Math.max(expectedBytes, event.lengthComputable ? event.total : 0);
+        onProgress(total > 0 ? Math.min(1, event.loaded / total) : null);
       },
       (error) => reject(new Error(`Modell konnte nicht geladen werden: ${url}`, { cause: error }))
     );

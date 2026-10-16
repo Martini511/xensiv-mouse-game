@@ -24,7 +24,7 @@ export class LoadingOverlay {
     this.label.textContent =
       progress === null || progress === undefined
         ? "Lädt Modell…"
-        : `Lädt Modell… ${Math.round(progress * 100)} %`;
+        : `Lädt Modell… ${Math.round(Math.min(1, Math.max(0, progress)) * 100)} %`;
   }
 
   setError(message) {

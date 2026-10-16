@@ -5,6 +5,7 @@ import { ThirdPersonCamera } from "./ThirdPersonCamera.js";
 import { Board, HEIGHT_CELL_SIZE } from "./Board.js";
 import { IntroSequence } from "./IntroSequence.js";
 import {
+  PLATINE_BYTES,
   PLATINE_URL,
   PLAYER_URL,
   alignToPcb,
@@ -245,7 +246,7 @@ export class Game {
   async load() {
     try {
       const [gltf, player] = await Promise.all([
-        loadGLTF(PLATINE_URL, (progress) => this.loadingOverlay.setProgress(progress)),
+        loadGLTF(PLATINE_URL, (progress) => this.loadingOverlay.setProgress(progress), PLATINE_BYTES),
         loadGLTF(PLAYER_URL),
       ]);
 
