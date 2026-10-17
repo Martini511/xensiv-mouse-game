@@ -16,6 +16,10 @@
  * - Standard-Mapping, Sticks mit radialer Deadzone, Tasten benannt statt
  *   ueber Indizes. Die Beschriftung folgt dem XENSIV Game Controller
  *   (A = F, Y = T, X = I, B = X).
+ * - Geraetefilter: Die Gamepad API meldet auch Geraete, die keine richtigen
+ *   Controller sind. Angenommen wird - wie in der Controller-Dashboard-
+ *   Website - nur ein Geraet mit genau REQUIRED_BUTTONS Tasten und
+ *   REQUIRED_AXES Achsen.
  */
 
 const AXIS_LEFT_X = 0;
@@ -68,6 +72,13 @@ const ANALOG_BUTTONS = new Set(["L2", "R2"]);
 const TRIGGER_THRESHOLD = 0.5;
 
 const BUTTON_NAMES = Object.keys(BUTTON_INDEX);
+
+/** Geraeteprofil des XENSIV-Controllers - andere Geraete werden ignoriert. */
+const REQUIRED_BUTTONS = 16;
+const REQUIRED_AXES = 4;
+
+const isSupportedGamepad = (pad) =>
+  pad.buttons.length === REQUIRED_BUTTONS && pad.axes.length === REQUIRED_AXES;
 
 export class GamepadManager {
   /** @param {{deadzone?: number}} options */
@@ -139,9 +150,14 @@ export class GamepadManager {
   }
 
   _onConnected(event) {
-    const { index, id, mapping } = event.gamepad;
-    console.log(`[Gamepad] verbunden - Index ${index}: "${id}" (mapping: ${mapping || "unbekannt"})`);
-    if (this.activeIndex === null) this.activeIndex = index;
+    const { index, id, mapping, axes, buttons } = event.gamepad;
+    const supported = isSupportedGamepad(event.gamepad);
+    console.log(
+      `[Gamepad] ${supported ? "verbunden" : "ignoriert (kein unterstuetzter Controller)"} - ` +
+        `Index ${index}: "${id}" ` +
+        `(mapping: ${mapping || "unbekannt"}, ${axes.length} Achsen, ${buttons.length} Buttons)`
+    );
+    if (supported && this.activeIndex === null) this.activeIndex = index;
   }
 
   _onDisconnected(event) {
@@ -157,7 +173,7 @@ export class GamepadManager {
   _pickFirstAvailableGamepad() {
     const pads = navigator.getGamepads ? navigator.getGamepads() : [];
     for (const pad of pads) {
-      if (pad && pad.connected) {
+      if (pad && pad.connected && isSupportedGamepad(pad)) {
         this.activeIndex = pad.index;
         return;
       }
@@ -171,7 +187,12 @@ export class GamepadManager {
     if (this.activeIndex === null) this._pickFirstAvailableGamepad();
     if (this.activeIndex === null) return null;
     const pad = pads[this.activeIndex];
-    return pad && pad.connected ? pad : null;
+    // Unter dem Index kann inzwischen ein anderes Geraet haengen.
+    if (!pad || !pad.connected || !isSupportedGamepad(pad)) {
+      this.activeIndex = null;
+      return null;
+    }
+    return pad;
   }
 }
 

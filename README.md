@@ -96,6 +96,12 @@ Controller benutzt wird, erscheint unten rechts eine Kurzübersicht, und die
 Hinweise nennen die Controller-Taste. Browser geben einen Controller erst
 frei, nachdem einmal eine Taste daran gedrückt wurde.
 
+Angenommen wird – wie in der Controller-Dashboard-Website – nur ein Gerät mit
+genau **16 Tasten und 4 Achsen** (das Profil des XENSIV Game Controllers).
+Die Gamepad API meldet auch Geräte, die keine richtigen Controller sind; die
+werden ignoriert und nur in der Browser-Konsole erwähnt
+(`REQUIRED_BUTTONS` / `REQUIRED_AXES` in `src/input/GamepadManager.js`).
+
 ## Projektaufbau
 
 | Pfad                          | Inhalt                                              |
